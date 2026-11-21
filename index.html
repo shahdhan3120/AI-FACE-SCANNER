@@ -6,9 +6,8 @@
 </head>
 <body>
 <div class="app-shell">
-<header class="topbar"><a class="brand" href="#"><span class="brand-mark">◉</span><span><b>FACE<span> SCOPE</span></b><small>AI EXPRESSION READER</small></span></a><div class="top-actions"><span class="secure"><i></i> PRIVATE SESSION</span><button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="logout-btn" id="logout">Log out</button></div></header>
-<section id="login" class="login-screen"><div class="login-art"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="face-symbol">◉</div><p>READ THE EXPRESSION.<br><strong>NOT THE PERSON.</strong></p></div><form id="loginForm" class="login-card"><p class="eyebrow">ADMIN ACCESS</p><h1>Welcome<br><em>back.</em></h1><p class="muted">Sign in to open your private expression reader.</p><label>Email address<input id="email" type="email" autocomplete="username" required placeholder="you@example.com"></label><label>Password<input id="password" type="password" autocomplete="current-password" required placeholder="Your password"></label><button class="primary full" id="loginButton" type="submit">Unlock workspace <span>→</span></button><p id="loginMsg" class="status" role="status"></p><p class="fine">Administrator-only access · Public sign-up disabled</p></form></section>
-<main id="app" hidden>
+<header class="topbar"><a class="brand" href="#"><span class="brand-mark">◉</span><span><b>FACE<span> SCOPE</span></b><small>AI EXPRESSION READER</small></span></a><div class="top-actions"><span class="secure"><i></i> OPEN ACCESS</span><button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">☼</button></div></header>
+<main id="app">
 <section class="welcome-row"><div><p class="eyebrow">YOUR PRIVATE WORKSPACE</p><h1>Expression <em>studio</em></h1><p class="muted">Explore visible facial movement cues with on-device analysis.</p></div><div class="session-pill"><span class="pulse"></span> SESSION READY</div></section>
 <div class="dashboard">
 <section class="panel scanner-panel"><div class="panel-head"><div><p class="eyebrow">01 / SCANNER</p><h2>Live view</h2></div><span class="live-label" id="scanStatus">● STANDBY</span></div>
@@ -26,8 +25,8 @@
 </div>
 <section class="lower-grid"><section class="panel history-panel"><div class="panel-head"><div><p class="eyebrow">03 / SESSION LOG</p><h2>Recent readings</h2></div><button class="text-btn" id="clearHistory">Clear history</button></div><div id="history" class="history-list"><div class="history-empty">Your session readings will appear here.</div></div></section>
 <section class="panel report-panel"><p class="eyebrow">04 / EXPORT</p><h2>Session tools</h2><p class="muted">Save a snapshot or export a simple summary of this session.</p><div class="export-actions"><button class="secondary full" id="downloadReport">↓ Download report</button><button class="secondary full" id="downloadCapture" disabled>▣ Save snapshot</button></div><div class="privacy-note"><span>◇</span><div><b>Privacy by design</b><p>Analysis stays on this device. No face identity matching, cloud upload or automatic image storage.</p></div></div></section></section>
-<footer><span>FACE SCOPE · PRIVATE ADMIN WORKSPACE</span><span>Expression cues only · Not a diagnostic tool</span></footer>
+<footer><span>FACE SCOPE · OPEN ACCESS WORKSPACE</span><span>Expression cues only · Not a diagnostic tool</span></footer>
 </main>
 </div>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script><script type="module" src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body></html>
