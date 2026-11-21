@@ -2,7 +2,7 @@ import { FaceLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdel
 
 const $=id=>document.getElementById(id);
 const video=$("video"),photo=$("photoPreview"),canvas=$("overlay"),ctx=canvas.getContext("2d");
-let landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastVideoUi=0,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false;
+let landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastVideoUi=0,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false,paused=false,meshEnabled=true,scanInterval=900;
 
 const labels=[
  {key:"happy",name:"Happy-like",emoji:"😊",desc:"Smile-related facial movement cues"},
@@ -58,7 +58,7 @@ function renderScores(rows){
 function resizeCanvas(w,h){canvas.width=w;canvas.height=h;}
 function drawLandmarks(result,w,h,flip=false){
  resizeCanvas(w,h);ctx.clearRect(0,0,w,h);
- if(!result.faceLandmarks?.length)return;
+ if(!meshEnabled||!result.faceLandmarks?.length)return;
  result.faceLandmarks.forEach(points=>{
   if(drawingUtils){ctx.save();if(flip){ctx.translate(w,0);ctx.scale(-1,1)}drawingUtils.drawConnectors(points,FaceLandmarker.FACE_LANDMARKS_TESSELATION,{color:"#66e7d3",lineWidth:.45});drawingUtils.drawConnectors(points,FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,{color:"#a9b7ff",lineWidth:1.4});ctx.restore();}
  });
@@ -80,7 +80,7 @@ function renderHistory(){
 }
 function resetResult(){$("resultEmoji").textContent="—";$("resultName").textContent="No analysis yet";$("resultDescription").textContent="Start the camera or upload an image.";$("scores").innerHTML='<div class="score-empty">Analysis results will appear here.</div>';$("faceCount").textContent="0 faces";$("facesMetric").textContent="0";$("faceBadge").textContent="NO FACE";$("modeLabel").textContent="WAITING";lastReading=null;resizeCanvas(1,1);$("scanCount").textContent=scans;}
 function stopCamera(){
- if(raf)cancelAnimationFrame(raf);raf=0;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;video.style.display="none";$("stopCamera").disabled=true;$("startCamera").disabled=false;$("switchCamera").disabled=true;if(scanMode==="camera")scanMode="idle";if(!photo.src){$("stageEmpty").hidden=false;setStatus("Standby","Waiting");}else setStatus("Photo loaded","Photo");
+ if(raf)cancelAnimationFrame(raf);raf=0;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;video.style.display="none";$("stopCamera").disabled=true;$("startCamera").disabled=false;$("switchCamera").disabled=true;$("pauseCamera").disabled=true;$("pauseCamera").textContent="Ⅱ Pause";paused=false;if(scanMode==="camera")scanMode="idle";if(!photo.src){$("stageEmpty").hidden=false;setStatus("Standby","Waiting");}else setStatus("Photo loaded","Photo");
 }
 async function startCamera(){
  try{
@@ -93,13 +93,13 @@ async function startCamera(){
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
   video.srcObject=stream;video.style.display="block";$("stageEmpty").hidden=true;
   await video.play();
-  scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;
+  scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;$("pauseCamera").disabled=false;$("pauseCamera").textContent="Ⅱ Pause";paused=false;
   lastVideoTime=-1;lastVideoUi=0;frames=0;lastFpsTime=performance.now();
   setStatus("Camera on · loading AI","Loading");
   await loadModel();
   if(!stream||scanMode!=="camera")return;
   setStatus("Live scanning","Live");
-  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const now=performance.now(),result=landmarker.detectForVideo(video,now);drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);frames++;if(now-lastVideoUi>=900){updateReading(result,"LIVE");lastVideoUi=now;}if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error("Live analysis error:",e);setStatus("Analysis error","Error");}}raf=requestAnimationFrame(loop);};loop();
+  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const now=performance.now(),result=landmarker.detectForVideo(video,now);drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);frames++;if(!paused&&now-lastVideoUi>=scanInterval){updateReading(result,"LIVE");lastVideoUi=now;}if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error("Live analysis error:",e);setStatus("Analysis error","Error");}}raf=requestAnimationFrame(loop);};loop();
  }catch(e){
   console.error("Camera startup error:",e);
   const messages={NotAllowedError:"Camera permission was blocked. Open Chrome site settings for this website, allow Camera, then reload.",NotFoundError:"No camera was found on this device.",NotReadableError:"The camera is busy in another app. Close other camera apps and try again.",OverconstrainedError:"The selected camera is unavailable. Reload and try again."};
@@ -110,6 +110,17 @@ async function analysePhoto(file){
  if(!file||!file.type.startsWith("image/"))return;if(file.size>12*1024*1024){alert("Please choose an image smaller than 12 MB.");return;}
  stopCamera();try{await loadModel();if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);currentImageUrl=URL.createObjectURL(file);photo.onload=()=>{video.style.display="none";photo.style.display="block";$("stageEmpty").hidden=true;const w=photo.naturalWidth,h=photo.naturalHeight;const result=landmarker.detect(photo);drawLandmarks(result,w,h,false);scanMode="photo";setStatus("Photo analysed","Photo");$("captureBtn").disabled=false;updateReading(result,"PHOTO");};photo.src=currentImageUrl;}catch(e){console.error(e);alert(e.message||"Could not analyse this image.");}
 }
+function downloadCsv(){
+ const rows=[["Time","Mode","Faces","Leading cue","Cue level (%)",...labels.map(x=>x.name)]];
+ history.slice().reverse().forEach(x=>rows.push([x.time.toISOString(),x.mode,x.count,x.top.name,x.top.value,...labels.map(l=>x.rows.find(r=>r.key===l.key)?.value??0)]));
+ const csv=rows.map(row=>row.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
+ const blob=new Blob(["\\uFEFF",csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="face-scope-history.csv";a.click();URL.revokeObjectURL(url);
+}
+async function copySummary(){
+ if(!lastReading){alert("Run a scan first to create a summary.");return;}
+ const summary="FACE SCOPE — EXPRESSION CUE SUMMARY\nTime: "+lastReading.time.toLocaleString()+"\nMode: "+lastReading.mode+"\nFaces detected: "+lastReading.count+"\nLeading cue: "+lastReading.top.name+" ("+lastReading.top.value+"%)\n\nCue levels:\n"+lastReading.rows.map(x=>x.name+": "+x.value+"%").join("\n")+"\n\nNote: Approximate visible facial movement cues only; not a reliable measure of actual emotion or mental state.";
+ try{await navigator.clipboard.writeText(summary);alert("Summary copied!");}catch(e){alert("Clipboard access is unavailable. Try opening the site in Chrome over HTTPS.");}
+}
 function capture(){
  if(scanMode!=="camera"||!video.videoWidth)return;const out=document.createElement("canvas");out.width=video.videoWidth;out.height=video.videoHeight;const c=out.getContext("2d");if(mirror){c.translate(out.width,0);c.scale(-1,1)}c.drawImage(video,0,0);lastSnapshot=out.toDataURL("image/png");$("downloadCapture").disabled=false;const a=document.createElement("a");a.href=lastSnapshot;a.download="face-scope-capture.png";a.click();
 }
@@ -117,12 +128,12 @@ function downloadReport(){
  const report={app:"Face Scope - AI Expression Reader",createdAt:new Date().toISOString(),note:"Expression cue estimates only; not a reliable measure of emotion or mental state. Images are not included.",readings:history.map(x=>({time:x.time.toISOString(),mode:x.mode,faces:x.count,leadingCue:x.top.name,estimatedCueLevel:x.top.value,estimatedCueLevels:Object.fromEntries(x.rows.map(r=>[r.name,r.value]))}))};
  const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="face-scope-session-report.json";a.click();URL.revokeObjectURL(url);
 }
-$("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;
+$("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;\n$("pauseCamera").onclick=()=>{if(scanMode!=="camera")return;paused=!paused;$("pauseCamera").textContent=paused?"▶ Resume":"Ⅱ Pause";setStatus(paused?"Analysis paused":"Live scanning",paused?"Paused":"Live");};\n$("meshToggle").onclick=()=>{meshEnabled=!meshEnabled;$("meshToggle").textContent="◇ Mesh: "+(meshEnabled?"on":"off");if(!meshEnabled)ctx.clearRect(0,0,canvas.width,canvas.height);};\n$("scanSpeed").onchange=e=>{scanInterval=Number(e.target.value)||900;};\n$("fullscreenBtn").onclick=async()=>{try{if(!document.fullscreenElement)await $("stage").requestFullscreen();else await document.exitFullscreen();}catch(e){alert("Full-screen mode is not available in this browser.");}};
 $("switchCamera").onclick=async()=>{facing=facing==="user"?"environment":"user";await startCamera();};
 $("photoInput").onchange=e=>{const file=e.target.files?.[0];if(file)analysePhoto(file);e.target.value="";};
 $("mirrorToggle").onclick=()=>{mirror=!mirror;video.style.transform=mirror?"scaleX(-1)":"none";$("mirrorToggle").textContent="◐ Mirror: "+(mirror?"on":"off");};
 $("captureBtn").onclick=capture;$("downloadCapture").onclick=()=>{if(!lastSnapshot)return;const a=document.createElement("a");a.href=lastSnapshot;a.download="face-scope-capture.png";a.click();};
-$("downloadReport").onclick=downloadReport;$("clearHistory").onclick=()=>{history=[];renderHistory();};$("clearBtn").onclick=()=>{stopCamera();if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;photo.removeAttribute("src");photo.style.display="none";$("stageEmpty").hidden=false;$("captureBtn").disabled=true;$("downloadCapture").disabled=true;lastSnapshot=null;resetResult();setStatus("Standby","Waiting");};
+$("downloadReport").onclick=downloadReport;$("downloadCsv").onclick=downloadCsv;$("copySummary").onclick=copySummary;$("clearHistory").onclick=()=>{history=[];renderHistory();};$("clearBtn").onclick=()=>{stopCamera();if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;photo.removeAttribute("src");photo.style.display="none";$("stageEmpty").hidden=false;$("captureBtn").disabled=true;$("downloadCapture").disabled=true;lastSnapshot=null;resetResult();setStatus("Standby","Waiting");};
 $("themeToggle").onclick=()=>document.body.classList.toggle("light");
 $("app").hidden=false;
 window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(t=>t.stop());if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);});
