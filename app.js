@@ -6,7 +6,7 @@ firebase.initializeApp(firebaseConfig);
 const auth=firebase.auth();
 const $=id=>document.getElementById(id);
 const video=$("video"),photo=$("photoPreview"),canvas=$("overlay"),ctx=canvas.getContext("2d");
-let user=null,landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false;
+let user=null,landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastVideoUi=0,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false;
 
 const labels=[
  {key:"happy",name:"Happy-like",emoji:"😊",desc:"Smile-related facial movement cues"},
@@ -27,7 +27,8 @@ async function loadModel(){
  modelLoading=true;setStatus("Loading AI model","Loading");
  try{
   const vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-  landmarker=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",delegate:"GPU"},runningMode:"VIDEO",numFaces:4,outputFaceBlendshapes:true,outputFacialTransformationMatrixes:false});
+  const options={baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"},runningMode:"VIDEO",numFaces:4,outputFaceBlendshapes:true,outputFacialTransformationMatrixes:false};
+  try{landmarker=await FaceLandmarker.createFromOptions(vision,{...options,baseOptions:{...options.baseOptions,delegate:"GPU"}});}catch(gpuError){console.warn("GPU delegate unavailable; retrying on CPU.",gpuError);landmarker=await FaceLandmarker.createFromOptions(vision,options);}
   drawingUtils=new DrawingUtils(ctx);setStatus("Model ready","Ready");return landmarker;
  }catch(e){console.error(e);setStatus("Model error","Error");throw new Error("Could not load the expression model. Check your internet connection and refresh.");}
  finally{modelLoading=false;}
@@ -89,8 +90,8 @@ async function startCamera(){
  try{
   await loadModel();if(stream)stopCamera();if(currentImageUrl){URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;}photo.removeAttribute("src");photo.style.display="none";
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
-  video.srcObject=stream;video.style.display="block";$("stageEmpty").hidden=true;await video.play();scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;lastVideoTime=-1;frames=0;lastFpsTime=performance.now();setStatus("Live scanning","Live");
-  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const result=landmarker.detectForVideo(video,performance.now());drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);updateReading(result,"LIVE");frames++;const now=performance.now();if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error(e);}}raf=requestAnimationFrame(loop);};loop();
+  video.srcObject=stream;video.style.display="block";$("stageEmpty").hidden=true;await video.play();scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;lastVideoTime=-1;lastVideoUi=0;frames=0;lastFpsTime=performance.now();setStatus("Live scanning","Live");
+  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const now=performance.now(),result=landmarker.detectForVideo(video,now);drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);frames++;if(now-lastVideoUi>=900){updateReading(result,"LIVE");lastVideoUi=now;}if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error(e);}}raf=requestAnimationFrame(loop);};loop();
  }catch(e){console.error(e);alert(e.message||"Camera unavailable. Allow camera permission and use HTTPS.");stopCamera();}
 }
 async function analysePhoto(file){
