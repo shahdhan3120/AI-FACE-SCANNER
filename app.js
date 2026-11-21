@@ -84,11 +84,27 @@ function stopCamera(){
 }
 async function startCamera(){
  try{
-  await loadModel();if(stream)stopCamera();if(currentImageUrl){URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;}photo.removeAttribute("src");photo.style.display="none";
+  if(!window.isSecureContext)throw new Error("Camera access needs HTTPS. Open the website using its https:// address.");
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error("Camera access is unavailable in this browser. Open the site in Chrome.");
+  if(stream)stopCamera();
+  if(currentImageUrl){URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;}
+  photo.removeAttribute("src");photo.style.display="none";
+  setStatus("Requesting camera permission","Camera");
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
-  video.srcObject=stream;video.style.display="block";$("stageEmpty").hidden=true;await video.play();scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;lastVideoTime=-1;lastVideoUi=0;frames=0;lastFpsTime=performance.now();setStatus("Live scanning","Live");
-  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const now=performance.now(),result=landmarker.detectForVideo(video,now);drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);frames++;if(now-lastVideoUi>=900){updateReading(result,"LIVE");lastVideoUi=now;}if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error(e);}}raf=requestAnimationFrame(loop);};loop();
- }catch(e){console.error(e);alert(e.message||"Camera unavailable. Allow camera permission and use HTTPS.");stopCamera();}
+  video.srcObject=stream;video.style.display="block";$("stageEmpty").hidden=true;
+  await video.play();
+  scanMode="camera";$("startCamera").disabled=true;$("stopCamera").disabled=false;$("switchCamera").disabled=false;
+  lastVideoTime=-1;lastVideoUi=0;frames=0;lastFpsTime=performance.now();
+  setStatus("Camera on · loading AI","Loading");
+  await loadModel();
+  if(!stream||scanMode!=="camera")return;
+  setStatus("Live scanning","Live");
+  const loop=()=>{if(!stream||scanMode!=="camera")return;if(video.readyState>=2&&video.currentTime!==lastVideoTime){lastVideoTime=video.currentTime;try{const now=performance.now(),result=landmarker.detectForVideo(video,now);drawLandmarks(result,video.videoWidth,video.videoHeight,mirror);frames++;if(now-lastVideoUi>=900){updateReading(result,"LIVE");lastVideoUi=now;}if(now-lastFpsTime>=1000){fps=Math.round(frames*1000/(now-lastFpsTime));$("fps").textContent=fps;frames=0;lastFpsTime=now;}}catch(e){console.error("Live analysis error:",e);setStatus("Analysis error","Error");}}raf=requestAnimationFrame(loop);};loop();
+ }catch(e){
+  console.error("Camera startup error:",e);
+  const messages={NotAllowedError:"Camera permission was blocked. Open Chrome site settings for this website, allow Camera, then reload.",NotFoundError:"No camera was found on this device.",NotReadableError:"The camera is busy in another app. Close other camera apps and try again.",OverconstrainedError:"The selected camera is unavailable. Reload and try again."};
+  alert(messages[e.name]||e.message||"Camera could not start. Check browser camera permission and try again.");stopCamera();
+ }
 }
 async function analysePhoto(file){
  if(!file||!file.type.startsWith("image/"))return;if(file.size>12*1024*1024){alert("Please choose an image smaller than 12 MB.");return;}
