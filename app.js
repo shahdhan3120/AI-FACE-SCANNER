@@ -1,12 +1,8 @@
 import { FaceLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
 
-const firebaseConfig={apiKey:"AIzaSyBOfy1EniuYItmFl103AibJd1gag6q4SNo",authDomain:"ai-face-scanner-ea2b5.firebaseapp.com",projectId:"ai-face-scanner-ea2b5",storageBucket:"ai-face-scanner-ea2b5.firebasestorage.app",messagingSenderId:"502564498315",appId:"1:502564498315:web:c48b23ff8772700c501d8e"};
-const ADMIN_UID="m3YVRkYRz1Z11OEBV5I9xvtkFot2";
-firebase.initializeApp(firebaseConfig);
-const auth=firebase.auth();
 const $=id=>document.getElementById(id);
 const video=$("video"),photo=$("photoPreview"),canvas=$("overlay"),ctx=canvas.getContext("2d");
-let user=null,landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastVideoUi=0,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false;
+let landmarker=null,drawingUtils=null,stream=null,raf=0,lastVideoTime=-1,lastVideoUi=0,lastFpsTime=0,frames=0,fps=0,scans=0,faceTotal=0,history=[],lastReading=null,mirror=true,facing="user",currentImageUrl=null,lastSnapshot=null,scanMode="idle",modelLoading=false;
 
 const labels=[
  {key:"happy",name:"Happy-like",emoji:"😊",desc:"Smile-related facial movement cues"},
@@ -105,9 +101,6 @@ function downloadReport(){
  const report={app:"Face Scope - AI Expression Reader",createdAt:new Date().toISOString(),note:"Expression cue estimates only; not a reliable measure of emotion or mental state. Images are not included.",readings:history.map(x=>({time:x.time.toISOString(),mode:x.mode,faces:x.count,leadingCue:x.top.name,estimatedCueLevel:x.top.value,estimatedCueLevels:Object.fromEntries(x.rows.map(r=>[r.name,r.value]))}))};
  const blob=new Blob([JSON.stringify(report,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="face-scope-session-report.json";a.click();URL.revokeObjectURL(url);
 }
-$("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginButton").disabled=true;setMessage("loginMsg","Signing in…");try{const r=await auth.signInWithEmailAndPassword($("email").value.trim(),$("password").value);if(r.user.uid!==ADMIN_UID){await auth.signOut();setMessage("loginMsg","This account is not authorized.",true);}}catch(e){console.error(e);setMessage("loginMsg","Sign-in failed. Check your email and password.",true);}finally{$("loginButton").disabled=false;}});
-$("logout").onclick=async()=>{stopCamera();await auth.signOut();};
-auth.onAuthStateChanged(async u=>{if(!u){user=null;$("app").hidden=true;$("login").hidden=false;stopCamera();return;}if(u.uid!==ADMIN_UID){await auth.signOut();setMessage("loginMsg","This account is not authorized.",true);return;}user=u;$("login").hidden=true;$("app").hidden=false;});
 $("startCamera").onclick=startCamera;$("stopCamera").onclick=stopCamera;
 $("switchCamera").onclick=async()=>{facing=facing==="user"?"environment":"user";await startCamera();};
 $("photoInput").onchange=e=>{const file=e.target.files?.[0];if(file)analysePhoto(file);e.target.value="";};
@@ -115,4 +108,5 @@ $("mirrorToggle").onclick=()=>{mirror=!mirror;video.style.transform=mirror?"scal
 $("captureBtn").onclick=capture;$("downloadCapture").onclick=()=>{if(!lastSnapshot)return;const a=document.createElement("a");a.href=lastSnapshot;a.download="face-scope-capture.png";a.click();};
 $("downloadReport").onclick=downloadReport;$("clearHistory").onclick=()=>{history=[];renderHistory();};$("clearBtn").onclick=()=>{stopCamera();if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);currentImageUrl=null;photo.removeAttribute("src");photo.style.display="none";$("stageEmpty").hidden=false;$("captureBtn").disabled=true;$("downloadCapture").disabled=true;lastSnapshot=null;resetResult();setStatus("Standby","Waiting");};
 $("themeToggle").onclick=()=>document.body.classList.toggle("light");
+$("app").hidden=false;
 window.addEventListener("beforeunload",()=>{if(stream)stream.getTracks().forEach(t=>t.stop());if(currentImageUrl)URL.revokeObjectURL(currentImageUrl);});
